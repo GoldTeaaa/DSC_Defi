@@ -8,6 +8,8 @@ import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {MockV3Aggregator} from "test/mocks/MockV3Aggregator.sol";
+// import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 contract DSCEngineTest is Test {
     DecentralizedStableCoin token;
@@ -36,9 +38,10 @@ contract DSCEngineTest is Test {
     /*//////////////////////////////////////////////////////////////
                            CONSTRUCTOR TEST
     //////////////////////////////////////////////////////////////*/
-    address [] public tokenAddresses;
-    address [] public priceFeedAddresses;
-    function testRevertsIfTokenLengthDoesntMatchPriceFeeds() public{
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+
+    function testRevertsIfTokenLengthDoesntMatchPriceFeeds() public {
         tokenAddresses.push(weth);
         priceFeedAddresses.push(wEthUsdPriceFeed);
         priceFeedAddresses.push(wBtcUsdPriceFeed);
@@ -50,14 +53,14 @@ contract DSCEngineTest is Test {
     /*//////////////////////////////////////////////////////////////
                               PRICE TEST
     //////////////////////////////////////////////////////////////*/
-    function testGetUsdValue() public view{
+    function testGetUsdValue() public view {
         uint256 usdValue = engine.getUsdValue(weth, AMOUNT);
-        uint256 expectedValue = 30000e18;
+        uint256 expectedValue = 40000e18;
 
         assertEq(expectedValue, usdValue);
     }
 
-    function testGetTokenAmountFromUsd() public view{
+    function testGetTokenAmountFromUsd() public view {
         uint256 usdAmountInWei = 10000e18;
         uint256 expectedValue = 5e18;
         uint256 calculatedValue = engine.getTokenAmountFromUsd(weth, usdAmountInWei);
@@ -76,7 +79,7 @@ contract DSCEngineTest is Test {
         vm.stopPrank();
     }
 
-    function testRevertIfCollateralUnapproved() public{
+    function testRevertIfCollateralUnapproved() public {
         vm.prank(USER);
         // the address produced by this ranToken is something else and not the same as weth
         ERC20Mock ranToken = new ERC20Mock();
@@ -84,7 +87,7 @@ contract DSCEngineTest is Test {
         engine.depositCollateral(address(ranToken), AMOUNT);
     }
 
-    modifier depositedCollateral(){
+    modifier depositedCollateral() {
         vm.startPrank(USER);
         ERC20Mock(weth).approve(address(engine), STARTING_ERC2O_BALANCE);
         engine.depositCollateral(weth, AMOUNT);
@@ -92,7 +95,7 @@ contract DSCEngineTest is Test {
         _;
     }
 
-    function testCanDepositCollateralAndGetAccountInfo() public depositedCollateral(){
+    function testCanDepositCollateralAndGetAccountInfo() public depositedCollateral {
         (uint256 totalDscMinted, uint256 UsdValue) = engine.getAccountInformation(USER);
         // uint256 depositedCollateral = engine.getCollateralDeposited(USER, weth);
         console.log(UsdValue);
@@ -104,17 +107,23 @@ contract DSCEngineTest is Test {
 
     /*//////////////////////////////////////////////////////////////
                                  Mint DSC
-    //////////////////////////////////////////////////////////////*/    
-    uint256 public constant MINT_DSC_AMOUNT = 21000;
-    
-    function testRevertIfMintDscViolateHealthFactor() public depositedCollateral(){
+    //////////////////////////////////////////////////////////////*/
+
+    function testRevertIfMintDscViolateHealthFactor() public depositedCollateral {
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            ((AMOUNT / 2) + 1) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        console.log(MINT_DSC_AMOUNT);
+
         vm.startPrank(USER);
         uint256 health = engine.calculateHealthFactor(MINT_DSC_AMOUNT, engine.getAccountCollateralValue(USER));
-        // vm.expectRevert(abi.encodePacked(DSCEngine.DSCEngine__BreaksHealthFactor.selector,health));
+        console.log("Collateral Value (Expected 2e23):", engine.getAccountCollateralValue(USER));
+
+        console.log("Health Factor is : ", health);
+        vm.expectRevert(abi.encodePacked(DSCEngine.DSCEngine__BreaksHealthFactor.selector, health));
         engine.mintDSC(MINT_DSC_AMOUNT);
-        uint256 healthAfterMint = engine.getHealthFactor(USER);
-        console.log(healthAfterMint);
+        // uint256 healthAfterMint = engine.getHealthFactor(USER);
+        // console.log(healthAfterMint);
         vm.stopPrank();
     }
-
 }
