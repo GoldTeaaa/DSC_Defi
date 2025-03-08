@@ -24,7 +24,7 @@ contract DSCEngineTest is Test {
 
     address public USER = makeAddr("user");
 
-    uint256 public constant AMOUNT = 20 ether;
+    uint256 public constant AMOUNT = 1 ether;
     uint256 public constant STARTING_ERC2O_BALANCE = 50 ether;
 
     function setUp() public {
@@ -55,7 +55,7 @@ contract DSCEngineTest is Test {
     //////////////////////////////////////////////////////////////*/
     function testGetUsdValue() public view {
         uint256 usdValue = engine.getUsdValue(weth, AMOUNT);
-        uint256 expectedValue = 40000e18;
+        uint256 expectedValue = 2000e18;
 
         assertEq(expectedValue, usdValue);
     }
@@ -95,6 +95,22 @@ contract DSCEngineTest is Test {
         _;
     }
 
+    function testDepositAndCollateralExist() public depositedCollateral(){
+        uint256 collateralDeposited = engine.getCollateralDeposited(USER, weth);
+        assertEq(uint256(collateralDeposited), uint256(AMOUNT));
+    }
+
+    modifier depositAndMintDsc(){
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 2) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(engine), MINT_DSC_AMOUNT);
+        engine.depositCollateralAndMintDSC(weth, AMOUNT, MINT_DSC_AMOUNT);
+        vm.stopPrank();
+        _;
+    }
+
     function testCanDepositCollateralAndGetAccountInfo() public depositedCollateral {
         (uint256 totalDscMinted, uint256 UsdValue) = engine.getAccountInformation(USER);
         // uint256 depositedCollateral = engine.getCollateralDeposited(USER, weth);
@@ -117,13 +133,99 @@ contract DSCEngineTest is Test {
 
         vm.startPrank(USER);
         uint256 health = engine.calculateHealthFactor(MINT_DSC_AMOUNT, engine.getAccountCollateralValue(USER));
-        console.log("Collateral Value (Expected 2e23):", engine.getAccountCollateralValue(USER));
-
-        console.log("Health Factor is : ", health);
         vm.expectRevert(abi.encodePacked(DSCEngine.DSCEngine__BreaksHealthFactor.selector, health));
         engine.mintDSC(MINT_DSC_AMOUNT);
-        // uint256 healthAfterMint = engine.getHealthFactor(USER);
-        // console.log(healthAfterMint);
         vm.stopPrank();
+    }
+
+    function testTokenDscMintedUpdatedInTheDscTokenContract() public depositAndMintDsc(){
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 2) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        uint256 userBalance = token.balanceOf(USER);
+        assertEq(userBalance, MINT_DSC_AMOUNT);
+    } 
+
+    /*//////////////////////////////////////////////////////////////
+                            Redeem Collateral
+    //////////////////////////////////////////////////////////////*/
+
+    function testRevertIfAmountRedeemExceedCollateral() public depositedCollateral(){
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__CollateralNotSufficient.selector);
+        engine.redeemCollateral(weth, AMOUNT + 1 ether );
+        vm.stopPrank();
+    }
+
+    function testRevertIfRedeemBreakHealthFactor() public depositedCollateral(){
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 2) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        // uint256 DscToWeth = /* engine.getTokenAmountFromUsd(weth, MINT_DSC_AMOUNT); */ MINT_DSC_AMOUNT;
+        vm.startPrank(USER);
+        engine.mintDSC(MINT_DSC_AMOUNT);
+        console.log("MINT_DSC_AMOUNT");
+        console.log("Collateral Deposited is: ",engine.getCollateralDeposited(USER, weth));
+        vm.expectRevert(DSCEngine.DSCEngine__CollateralNotSufficient.selector);
+        engine.redeemCollateral(weth, MINT_DSC_AMOUNT);
+        vm.stopPrank();
+    }
+
+    function testRedeemPartialCollateralAfterMinting() public depositedCollateral(){
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        //Divide the amount by 3 so the mint ratio is 3,3 : 10
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 3) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        // uint256 DscToWeth = /* engine.getTokenAmountFromUsd(weth, MINT_DSC_AMOUNT); */ MINT_DSC_AMOUNT;
+        vm.startPrank(USER);
+        engine.mintDSC(MINT_DSC_AMOUNT);
+        console.log("MINT_DSC_AMOUNT");
+        console.log("Collateral Deposited is: ",engine.getCollateralDeposited(USER, weth));
+        engine.redeemCollateral(weth, 0.025 ether);
+        vm.stopPrank();
+    }
+
+    function testDepositAndCollateralAtSameTime() public{
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 2) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(engine), AMOUNT);
+        engine.depositCollateralAndMintDSC(weth, AMOUNT, MINT_DSC_AMOUNT);
+        vm.stopPrank();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            Burn DSC
+    //////////////////////////////////////////////////////////////*/
+
+    function testBurnDscRevertedWhenAmountIsZero() public depositAndMintDsc(){
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        engine.burnDSC(0);
+        vm.stopPrank();
+    }
+
+    function testCantBurnDscMoreThanUserHas() public depositAndMintDsc(){
+        uint256 exceedAmount = 2 ether;
+        vm.startPrank(USER);
+        token.approve(address(engine), AMOUNT);
+        vm.expectRevert();
+        engine.burnDSC(exceedAmount);
+        vm.stopPrank();
+    }
+
+    function testBalanceIsReducedAterBurnt() public depositAndMintDsc(){
+        vm.startPrank(USER);
+        (, int256 price,,,) = MockV3Aggregator(wEthUsdPriceFeed).latestRoundData();
+        uint256 MINT_DSC_AMOUNT =
+            (AMOUNT / 2) * ((uint256(price) * engine.getAdditionalHealthPrecsion()) / engine.getPrecisions());
+        // (uint256 totalDscMinted, ) = engine.getAccountInformation(USER);
+        token.approve(address(engine), MINT_DSC_AMOUNT);
+        engine.burnDSC(MINT_DSC_AMOUNT);
+        vm.stopPrank();
+
+        (uint256 totalDscMinted, ) = engine.getAccountInformation(USER);
+        assertEq(totalDscMinted, 0);
     }
 }
