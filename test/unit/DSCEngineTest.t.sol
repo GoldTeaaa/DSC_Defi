@@ -82,7 +82,7 @@ contract DSCEngineTest is Test {
     function testRevertIfCollateralUnapproved() public {
         vm.prank(USER);
         // the address produced by this ranToken is something else and not the same as weth
-        ERC20Mock ranToken = new ERC20Mock("RAN","RAN",USER,100e18);
+        ERC20Mock ranToken = new ERC20Mock("RAN", "RAN", USER, 100e18);
         vm.expectRevert(DSCEngine.DSCEngine__NotAllowedToken.selector);
         engine.depositCollateral(address(ranToken), AMOUNT);
     }
