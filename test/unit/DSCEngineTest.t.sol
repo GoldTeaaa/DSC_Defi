@@ -7,7 +7,7 @@ import {DeployDSC} from "script/DeployDSC.s.sol";
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
-import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 import {MockV3Aggregator} from "test/mocks/MockV3Aggregator.sol";
 // import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
@@ -82,7 +82,7 @@ contract DSCEngineTest is Test {
     function testRevertIfCollateralUnapproved() public {
         vm.prank(USER);
         // the address produced by this ranToken is something else and not the same as weth
-        ERC20Mock ranToken = new ERC20Mock();
+        ERC20Mock ranToken = new ERC20Mock("RAN","RAN",USER,100e18);
         vm.expectRevert(DSCEngine.DSCEngine__NotAllowedToken.selector);
         engine.depositCollateral(address(ranToken), AMOUNT);
     }
