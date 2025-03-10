@@ -17,7 +17,7 @@ import {HelperConfig} from "script/HelperConfig.s.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Handler} from "test/fuzz/Handler.t.sol";
 
-contract InavariantTest is StdInvariant, Test{
+contract InavariantTest is StdInvariant, Test {
     DeployDSC deployer;
     DSCEngine engine;
     DecentralizedStableCoin token;
@@ -29,7 +29,7 @@ contract InavariantTest is StdInvariant, Test{
     address wBtcUsdPriceFeed;
     address wEthUsdPriceFeed;
 
-    function setUp() external{
+    function setUp() external {
         deployer = new DeployDSC();
         (token, engine, config) = deployer.run();
         (wEthUsdPriceFeed, wBtcUsdPriceFeed, weth, wbtc,) = config.activeNetworkConfig();
@@ -37,7 +37,7 @@ contract InavariantTest is StdInvariant, Test{
         targetContract(address(handler));
     }
 
-    function invariant_protocolMustHaveMoreValueThanTotalSupply() public view{
+    function invariant_protocolMustHaveMoreValueThanTotalSupply() public view {
         // get the value of all the collateral in the protocol
         // compare it to all the debt
         uint256 totalSupply = token.totalSupply();
