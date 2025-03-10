@@ -64,7 +64,7 @@ contract Handler is Script {
     /**
      * @notice redeemCollateral still have error. Fix this later.
      */
-    function redeemCollateral(uint256 collateralSeed, uint224 amountCollateral) public {
+    function redeemCollateral(uint256 collateralSeed, uint256 amountCollateral) public {
         // if (userWithCollateralDepostied.length == 0) {
         //     return;
         // }
@@ -72,7 +72,7 @@ contract Handler is Script {
         // depositCollateral(collateralSeed, amountCollateral);
         uint256 collateralToRedeem = engine.getCollateralDeposited(msg.sender, address(collateral));
         // console.log(collateralToRedeem);
-        uint256 amountCollateral = bound(uint256(amountCollateral), 0, collateralToRedeem);
+        amountCollateral = bound(amountCollateral, 0, collateralToRedeem);
         if (amountCollateral == 0) {
             return;
         }
